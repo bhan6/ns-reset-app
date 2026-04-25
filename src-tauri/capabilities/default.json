@@ -5,6 +5,9 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-open"
+    "core:window:allow-hide",
+    "shell:allow-open",
+    "store:default",
+    "global-shortcut:default"
   ]
 }
