@@ -66,10 +66,12 @@ struct TriggerState {
     is_pulsing: bool,
     last_session: Instant,
     active_secs: u64,
-    interval_secs: u64,      // 0 = off
-    threshold_secs: u64,     // 0 = off
+    interval_secs: u64,
+    threshold_secs: u64,
     quiet_start_min: Option<u32>,
     quiet_end_min: Option<u32>,
+    checkin_time_min: Option<u32>,
+    checkin_fired_today: Option<String>,
 }
 
 fn parse_time_min(s: &str) -> Option<u32> {
@@ -131,6 +133,7 @@ fn update_settings(
     threshold_mins: Option<u64>,
     quiet_start: Option<String>,
     quiet_end: Option<String>,
+    checkin_time: Option<String>,
     state: tauri::State<Arc<Mutex<TriggerState>>>,
 ) {
     let mut s = state.lock().unwrap();
@@ -138,6 +141,21 @@ fn update_settings(
     s.threshold_secs = threshold_mins.map(|m| m * 60).unwrap_or(0);
     s.quiet_start_min = quiet_start.as_deref().and_then(parse_time_min);
     s.quiet_end_min = quiet_end.as_deref().and_then(parse_time_min);
+    s.checkin_time_min = checkin_time.as_deref().and_then(parse_time_min);
+}
+
+/// Called by the frontend when a check-in score >= 4.
+#[tauri::command]
+fn trigger_pulse_manual(
+    state: tauri::State<Arc<Mutex<TriggerState>>>,
+    app: tauri::AppHandle,
+) {
+    let mut s = state.lock().unwrap();
+    s.is_pulsing = true;
+    drop(s);
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let _ = tray.set_icon(Some(pulse_icon()));
+    }
 }
 
 /// Called by the frontend when a session fully completes.
@@ -163,8 +181,10 @@ pub fn run() {
         active_secs: 0,
         interval_secs: 90 * 60,
         threshold_secs: 90 * 60,
-        quiet_start_min: Some(9 * 60),    // 09:00
-        quiet_end_min: Some(18 * 60),     // 18:00
+        quiet_start_min: Some(9 * 60),
+        quiet_end_min: Some(18 * 60),
+        checkin_time_min: None,
+        checkin_fired_today: None,
     }));
 
     let speech_state = SpeechState {
@@ -194,7 +214,7 @@ pub fn run() {
         )
         .manage(trigger_state.clone())
         .manage(speech_state)
-        .invoke_handler(tauri::generate_handler![session_complete, speak_text, stop_speech, update_settings])
+        .invoke_handler(tauri::generate_handler![session_complete, speak_text, stop_speech, update_settings, trigger_pulse_manual])
         .setup(move |app| {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
@@ -263,8 +283,26 @@ pub fn run() {
                     if idle < 60 {
                         s.active_secs += 60;
                     } else if idle >= 300 {
-                        // 5+ min idle: reset consecutive active time
                         s.active_secs = 0;
+                    }
+
+                    // Daily check-in trigger
+                    if let Some(ct) = s.checkin_time_min {
+                        use chrono::Timelike;
+                        let now = chrono::Local::now();
+                        let current_min = now.hour() * 60 + now.minute();
+                        let today_str = now.format("%Y-%m-%d").to_string();
+                        let already_fired = s.checkin_fired_today.as_deref() == Some(today_str.as_str());
+                        if !already_fired && current_min >= ct {
+                            s.checkin_fired_today = Some(today_str);
+                            drop(s);
+                            let _ = app_handle.emit("trigger-checkin", ());
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                            continue;
+                        }
                     }
 
                     if !s.is_pulsing && in_active_window(s.quiet_start_min, s.quiet_end_min) {

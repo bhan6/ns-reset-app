@@ -9,6 +9,8 @@ import MeditateFlow from './MeditateFlow'
 import MoveSession from './MoveSession'
 import Done from './Done'
 import Settings, { SettingsValues, DEFAULT_SETTINGS } from './Settings'
+import CheckIn from './CheckIn'
+import History, { DayEntry, getLast7Days } from './History'
 
 function GearIcon() {
   return (
@@ -19,32 +21,43 @@ function GearIcon() {
   )
 }
 
-type Screen = 'picker' | 'breathe' | 'meditate' | 'move' | 'done' | 'settings'
+type Screen = 'picker' | 'breathe' | 'meditate' | 'move' | 'done' | 'settings' | 'checkin' | 'history'
 
 const appWindow = getCurrentWindow()
 
 const today = () => new Date().toISOString().split('T')[0]
 
-async function loadTodayCount(): Promise<number> {
-  const store = await load('sessions.json', { autoSave: false, defaults: {} })
-  const date = await store.get<string>('date')
-  if (date !== today()) {
-    await store.set('date', today())
-    await store.set('count', 0)
-    await store.save()
-    return 0
+type SessionType = 'breathe' | 'meditate' | 'move'
+
+async function loadHistory(): Promise<Record<string, DayEntry>> {
+  const store = await load('history.json', { autoSave: false, defaults: {} })
+  const result: Record<string, DayEntry> = {}
+  for (const date of getLast7Days()) {
+    const entry = await store.get<DayEntry>(date)
+    if (entry) result[date] = entry
   }
-  return (await store.get<number>('count')) ?? 0
+  return result
 }
 
-async function incrementTodayCount(): Promise<number> {
-  const store = await load('sessions.json', { autoSave: false, defaults: {} })
-  const date = await store.get<string>('date')
-  const count = date === today() ? ((await store.get<number>('count')) ?? 0) + 1 : 1
-  await store.set('date', today())
-  await store.set('count', count)
+async function recordSession(type: SessionType): Promise<{ todayCount: number; history: Record<string, DayEntry> }> {
+  const store = await load('history.json', { autoSave: false, defaults: {} })
+  const date = today()
+  const existing: DayEntry = (await store.get<DayEntry>(date)) ?? { breathe: 0, meditate: 0, move: 0, total: 0 }
+  const updated: DayEntry = { ...existing, [type]: existing[type] + 1, total: existing.total + 1 }
+  await store.set(date, updated)
   await store.save()
-  return count
+  const history = await loadHistory()
+  return { todayCount: updated.total, history }
+}
+
+async function recordCheckin(score: number): Promise<Record<string, DayEntry>> {
+  const store = await load('history.json', { autoSave: false, defaults: {} })
+  const date = today()
+  const existing: DayEntry = (await store.get<DayEntry>(date)) ?? { breathe: 0, meditate: 0, move: 0, total: 0 }
+  const updated: DayEntry = { ...existing, checkins: [...(existing.checkins ?? []), score] }
+  await store.set(date, updated)
+  await store.save()
+  return loadHistory()
 }
 
 async function loadSettings(): Promise<SettingsValues> {
@@ -54,6 +67,7 @@ async function loadSettings(): Promise<SettingsValues> {
     threshold_mins: (await store.get<number | null>('threshold_mins')) ?? DEFAULT_SETTINGS.threshold_mins,
     quiet_start:    (await store.get<string | null>('quiet_start'))    ?? DEFAULT_SETTINGS.quiet_start,
     quiet_end:      (await store.get<string | null>('quiet_end'))      ?? DEFAULT_SETTINGS.quiet_end,
+    checkin_time:   (await store.get<string | null>('checkin_time'))   ?? DEFAULT_SETTINGS.checkin_time,
   }
 }
 
@@ -63,6 +77,7 @@ async function persistSettings(s: SettingsValues): Promise<void> {
   await store.set('threshold_mins', s.threshold_mins)
   await store.set('quiet_start',    s.quiet_start)
   await store.set('quiet_end',      s.quiet_end)
+  await store.set('checkin_time',   s.checkin_time)
   await store.save()
 }
 
@@ -72,6 +87,7 @@ function applySettings(s: SettingsValues) {
     thresholdMins: s.threshold_mins,
     quietStart:    s.quiet_start,
     quietEnd:      s.quiet_end,
+    checkinTime:   s.checkin_time,
   }).catch(console.error)
 }
 
@@ -79,6 +95,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>('picker')
   const [activeMins, setActiveMins] = useState<number | null>(null)
   const [sessionCount, setSessionCount] = useState(0)
+  const [historyData, setHistoryData] = useState<Record<string, DayEntry>>({})
   const [settings, setSettings] = useState<SettingsValues>(DEFAULT_SETTINGS)
 
   useEffect(() => {
@@ -98,9 +115,22 @@ function App() {
     return () => unlisten?.()
   }, [])
 
+  // Listen for trigger-checkin events from Rust
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+    listen('trigger-checkin', () => {
+      setScreen('checkin')
+    }).then(fn => { unlisten = fn })
+    return () => unlisten?.()
+  }, [])
+
   // Load persisted data on mount
   useEffect(() => {
-    loadTodayCount().then(setSessionCount).catch(console.error)
+    loadHistory().then(h => {
+      setHistoryData(h)
+      const todayEntry = h[today()]
+      setSessionCount(todayEntry?.total ?? 0)
+    }).catch(console.error)
     loadSettings().then(s => {
       setSettings(s)
       applySettings(s)
@@ -108,10 +138,22 @@ function App() {
   }, [])
 
   const complete = useCallback(() => {
+    const type = screen as SessionType
     invoke('session_complete').catch(console.error)
-    incrementTodayCount().then(setSessionCount).catch(console.error)
+    recordSession(type).then(({ todayCount, history }) => {
+      setSessionCount(todayCount)
+      setHistoryData(history)
+    }).catch(console.error)
     setActiveMins(null)
     setScreen('done')
+  }, [screen])
+
+  const completeCheckin = useCallback((score: number) => {
+    recordCheckin(score).then(setHistoryData).catch(console.error)
+    if (score >= 4) {
+      invoke('trigger_pulse_manual').catch(console.error)
+    }
+    setScreen('picker')
   }, [])
 
   const handleSaveSettings = useCallback((s: SettingsValues) => {
@@ -133,12 +175,14 @@ function App() {
         )}
         <button className="close-btn" onClick={hide}>×</button>
       </div>
-      {screen === 'picker'   && <Picker onSelect={(s) => setScreen(s)} activeMins={activeMins} sessionCount={sessionCount} />}
+      {screen === 'picker'   && <Picker onSelect={(s) => setScreen(s)} onHistory={() => setScreen('history')} activeMins={activeMins} sessionCount={sessionCount} />}
       {screen === 'breathe'  && <BreatheFlow  onComplete={complete} onStop={back} />}
       {screen === 'meditate' && <MeditateFlow onComplete={complete} onStop={back} />}
       {screen === 'move'     && <MoveSession  onComplete={complete} onStop={back} />}
       {screen === 'done'     && <Done onClose={hide} onBack={back} />}
       {screen === 'settings' && <Settings initial={settings} onSave={handleSaveSettings} onBack={back} />}
+      {screen === 'checkin'  && <CheckIn onComplete={completeCheckin} onSkip={back} />}
+      {screen === 'history'  && <History data={historyData} onBack={back} />}
     </div>
   )
 }

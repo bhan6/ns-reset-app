@@ -150,7 +150,7 @@ h1 {
 .footer {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   padding-top: 17px;
   margin-top: 34px;
 }
@@ -537,4 +537,109 @@ h1 {
   font-weight: 300;
   color: #5c4e3a;
   letter-spacing: 0.1em;
+}
+
+/* ── History ── */
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 4px;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid #1f1b15;
+}
+
+.history-date {
+  font-size: 12px;
+  color: #4a3f32;
+  letter-spacing: 0.04em;
+}
+
+.history-empty {
+  font-size: 12px;
+  color: #2a2318;
+}
+
+.history-counts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-type {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #5c4e3a;
+}
+
+.history-total {
+  font-size: 12px;
+  color: #6b5035;
+  font-variant-numeric: tabular-nums;
+  padding-left: 4px;
+  border-left: 1px solid #2a2318;
+}
+
+.history-btn {
+  background: none;
+  border: none;
+  color: #3a3028;
+  cursor: pointer;
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s ease;
+}
+
+.history-btn:hover {
+  color: #8a7660;
+}
+
+/* ── Check-in ── */
+
+.checkin-header {
+  margin-bottom: 32px;
+}
+
+.checkin-scale {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.checkin-btn {
+  flex: 1;
+  background: #1f1b15;
+  border: 1px solid #2a2318;
+  border-radius: 10px;
+  color: #5c4e3a;
+  font-size: 20px;
+  font-weight: 300;
+  padding: 14px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.checkin-btn:hover {
+  background: #252018;
+  border-color: #6b5035;
+  color: #c8b89a;
+}
+
+.checkin-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #3a3028;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
 }

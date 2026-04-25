@@ -5,6 +5,7 @@ export interface SettingsValues {
   threshold_mins: number | null
   quiet_start: string | null
   quiet_end: string | null
+  checkin_time: string | null
 }
 
 export const DEFAULT_SETTINGS: SettingsValues = {
@@ -12,6 +13,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   threshold_mins: 90,
   quiet_start: '09:00',
   quiet_end: '18:00',
+  checkin_time: null,
 }
 
 interface Props {
@@ -103,6 +105,30 @@ export default function Settings({ initial, onSave, onBack }: Props) {
             className="time-input"
             value={vals.quiet_end ?? '18:00'}
             onChange={e => update({ quiet_end: e.target.value || null })}
+          />
+        </div>
+      </div>
+
+      <div className="setting-group">
+        <div className="setting-label-row">
+          <p className="setting-label">daily check-in</p>
+          <Tooltip text="Opens a brief stress check-in at this time each day. Score ≥ 4 pulses the icon immediately." />
+        </div>
+        <div className="pick-row">
+          <button
+            className={`pick-btn ${vals.checkin_time === null ? 'active' : ''}`}
+            style={{ flex: '0 0 42px' }}
+            onClick={() => update({ checkin_time: null })}
+          >
+            off
+          </button>
+          <input
+            type="time"
+            className="time-input"
+            value={vals.checkin_time ?? '14:00'}
+            style={{ flex: 1, opacity: vals.checkin_time === null ? 0.35 : 1 }}
+            onChange={e => update({ checkin_time: e.target.value || null })}
+            onClick={() => { if (!vals.checkin_time) update({ checkin_time: '14:00' }) }}
           />
         </div>
       </div>

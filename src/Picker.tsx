@@ -1,5 +1,15 @@
+function HistoryIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="12" height="11" rx="2" />
+      <path d="M5 3V1M11 3V1M2 7h12" />
+    </svg>
+  )
+}
+
 interface Props {
   onSelect: (s: 'breathe' | 'meditate' | 'move') => void
+  onHistory: () => void
   activeMins: number | null
   sessionCount: number
 }
@@ -33,7 +43,7 @@ function PulseIcon() {
   )
 }
 
-export default function Picker({ onSelect, activeMins, sessionCount }: Props) {
+export default function Picker({ onSelect, onHistory, activeMins, sessionCount }: Props) {
   const subtitle = activeMins && activeMins > 0
     ? `you've been at it ${activeMins} min`
     : 'reset before you go'
@@ -69,6 +79,7 @@ export default function Picker({ onSelect, activeMins, sessionCount }: Props) {
       </div>
       <div className="footer">
         <span className="count">{sessionCount} {sessionCount === 1 ? 'session' : 'sessions'} today</span>
+        <button className="history-btn" onClick={onHistory}><HistoryIcon /></button>
       </div>
     </div>
   )
